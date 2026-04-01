@@ -1,0 +1,25 @@
+ekg:
+  base_url: http://127.0.0.1:8000
+  webhook_secret: null
+
+google:
+  credentials_path: state/google-oauth-client.json
+  token_path: state/google-token.json
+  scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/calendar.readonly
+    - https://www.googleapis.com/auth/spreadsheets.readonly
+  gmail_user_id: me
+  calendar_id: primary
+  sheets:
+    spreadsheet_id: "1_126A0A6-yX6n5sQYmsH_Jbk900yzjDaUy4jyX_aWT0"
+    contacts_range: Contacts!A:Z
+    deals_range: Deals!A:Z
+
+runtime:
+  state_dir: state
+  log_dir: logs
+  lookback_days: 30
+  max_messages: 250
+  extraction_mode: hybrid_llm_validated
+  source_owner: Dan
