@@ -1,72 +1,132 @@
 # Google_Connect
 
-Python-first Google data connectors for Enterprise_KG.
+Python-first Google Workspace connectors for Enterprise_KG.
 
 ## What it does
 
-- Reads Google Sheets contacts/deals data
-- Reads Gmail incrementally using persisted state
+- Reads Google Sheets contacts/deals data with stable document IDs
+- Reads Gmail incrementally with pagination-safe cursor handling
 - Backfills Gmail history in batches
-- Reads Google Calendar events and attendee context
-- Ingests documents into Enterprise_KG
-- Triggers Enterprise_KG document extraction
-- Produces thin n8n wrappers and cron-ready shell entrypoints
-
-## Layout
-
-- `google_connect/` - package source
-- `google_connect/runners/` - CLI runners
-- `google_connect/n8n/` - thin n8n wrapper workflows
-- `config/` - sample config files
-- `state/` - persisted cursors/checkpoints
-- `scripts/` - cron-friendly shell wrappers
-- `logs/` - runtime logs
+- Creates Gmail drafts without send capability
+- Reads Google Calendar events with full pagination
+- Reads Google Drive documents incrementally
+- Reads Google Keep notes incrementally
+- Reads and writes Google Tasks, then refreshes task state into Enterprise_KG
+- Ingests documents into Enterprise_KG and triggers extraction
+- Provides thin n8n wrappers and cron-ready shell entrypoints
 
 ## Quick start
 
-1. Create venv and install:
-
 ```bash
-cd Google_Connect
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e .
-```
-
-2. Copy env file:
-
-```bash
 cp .env.example .env
 ```
 
-3. Fill in:
-- Google OAuth/service-account credentials path(s)
-- Enterprise_KG base URL
-- Optional webhook secret
+Fill in `.env` or `config/google_connect.yaml` with:
 
-4. Run a job:
+- Google OAuth client credentials path
+- Enterprise_KG base URL and optional webhook secret
+- Optional Drive folder/tasklist filters
+- Google Keep enablement only after the required Keep scopes are approved
+
+## OAuth setup and re-auth
+
+There is no separate auth CLI. The OAuth flow is triggered automatically the first time the package calls `load_credentials()`.
+
+To force a fresh auth flow and regenerate the token:
+
+```bash
+cd /Users/dobrien/code/Google_Connect
+source .venv/bin/activate
+rm -f state/google-token.json
+python - <<'PY'
+from google_connect.config import load_config
+from google_connect.google_auth import load_credentials
+
+cfg = load_config("config/google_connect.yaml")
+load_credentials(cfg.google.credentials_path, cfg.google.token_path, cfg.google.scopes)
+print("Auth complete")
+print("Token saved to:", cfg.google.token_path)
+print("Scopes:", cfg.google.scopes)
+PY
+```
+
+Notes:
+
+- Make sure the configured scopes match what you want before running the flow.
+- For Gmail draft support, include `https://www.googleapis.com/auth/gmail.compose`.
+- Do not include `https://www.googleapis.com/auth/gmail.send` or `https://mail.google.com/`; those are rejected by policy.
+- If the browser flow falls back to manual copy/paste, Google will redirect the browser to a URL starting with `http://localhost/?state=...&code=...` after approval.
+- There is usually no local web server listening on `localhost`, so the page may fail to load. That is expected.
+- Copy the full `http://localhost/...` URL from the browser address bar and paste that entire URL back into the terminal when prompted.
+- Do not paste the original Google authorization URL; paste the final localhost redirect URL after approval.
+- Restart the MCP servers after re-auth so they pick up the refreshed token.
+
+## Runners
 
 ```bash
 python -m google_connect.runners.sheets_reader --config config/google_connect.yaml
 python -m google_connect.runners.gmail_incremental --config config/google_connect.yaml
 python -m google_connect.runners.gmail_backfill --config config/google_connect.yaml --max-messages 100
 python -m google_connect.runners.calendar_reader --config config/google_connect.yaml
+python -m google_connect.runners.calendar_writer --config config/google_connect.yaml create --summary "Test" --start 2026-04-20T17:00 --timezone Europe/Berlin --confirm-write
+python -m google_connect.runners.drive_reader --config config/google_connect.yaml
+python -m google_connect.runners.keep_reader --config config/google_connect.yaml
+python -m google_connect.runners.tasks_reader --config config/google_connect.yaml
+python -m google_connect.runners.tasks_writer --config config/google_connect.yaml create --tasklist "My Tasks" --title "Follow up" --confirm-write
+python -m google_connect.runners.tasks_writer --config config/google_connect.yaml update --tasklist "My Tasks" --task-id TASK_ID --notes "Updated context" --confirm-write
+python -m google_connect.runners.tasks_writer --config config/google_connect.yaml complete --tasklist "My Tasks" --task-id TASK_ID --confirm-write
+python -m google_connect.runners.sheets_writer --config config/google_connect.yaml update --range Contacts!A2:B2 --values-json '[[\"Alice\",\"alice@example.com\"]]' --confirm-write
+python -m google_connect.runners.sheets_writer --config config/google_connect.yaml append --range Contacts!A:B --value "Bob" --value "bob@example.com" --confirm-write
 ```
 
 ## Enterprise_KG integration model
 
 Each runner:
-1. normalizes source records into document payloads
+
+1. normalizes source records into stable document payloads
 2. calls `POST /api/ingest/document`
 3. calls `POST /api/extract/document`
-4. records structured summary counts and state
+4. records structured summaries and cursor state
 
-This aligns to current upstream Enterprise_KG API routes.
+This connector remains document-first. It does not write ontology assertions directly.
 
-## n8n wrappers
+## Write guardrails
 
-Import workflows in `google_connect/n8n/` and set environment/credentials as needed. They are wrappers around the Python runners, not business logic containers.
+- Gmail send scope and full-mail scope are forbidden and rejected at config load time.
+- All writes are disabled unless `GOOGLE_CONNECT_ENABLE_WRITES=true`.
+- Gmail drafts also require `GOOGLE_CONNECT_ENABLE_GMAIL_DRAFTS=true`.
+- Calendar, Sheets, and Tasks also require service-specific write toggles.
+- Writers require explicit confirmation flags.
+- Calendar deletion additionally requires `GOOGLE_CONNECT_ENABLE_CALENDAR_DELETE=true` and `--confirm-delete`.
+- Optional allowlists can restrict writes to approved tasklists, calendars, and spreadsheets.
 
-## Cron examples
+## Operational notes
 
-See `docs/OPERATIONS.md`.
+- `.env` values override YAML config.
+- Google Keep support is user-OAuth first, but Workspace admin approval may still be required for Keep scopes.
+- Drive ingestion is docs-focused in v1: native Google Docs plus supported plain text, PDF, and DOCX files.
+- Tasks v1 supports create, update, and complete. Delete is intentionally excluded.
+
+## MCP servers
+
+Two local stdio MCP servers are included for agent use:
+
+- Read-only server:
+  - `python -m google_connect.mcp.read_server`
+- Write-enabled server:
+  - `python -m google_connect.mcp.write_server`
+
+Both servers use the same Google OAuth token/config as the rest of the package. The write server enforces the existing guardrails:
+
+- global write kill switch
+- per-service write toggles
+- allowlists
+- explicit `confirmed=true` arguments on mutation tools
+
+The write server does not expose Gmail send or compose tools, and config loading rejects Gmail send/compose scopes entirely.
+The write server exposes Gmail draft creation only. Gmail send is not implemented, and config loading still rejects `gmail.send` and full-mail scopes.
+
+See `docs/OPERATIONS.md` for cron and wrapper examples.

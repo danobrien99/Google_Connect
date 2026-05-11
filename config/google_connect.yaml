@@ -1,5 +1,5 @@
 ekg:
-  base_url: http://127.0.0.1:8000
+  base_url: http://127.0.0.1:8010
   webhook_secret: null
 
 google:
@@ -7,14 +7,38 @@ google:
   token_path: state/google-token.json
   scopes:
     - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.compose
     - https://www.googleapis.com/auth/calendar.readonly
     - https://www.googleapis.com/auth/spreadsheets.readonly
+    - https://www.googleapis.com/auth/drive.readonly
+    - https://www.googleapis.com/auth/tasks
+    - https://www.googleapis.com/auth/tasks.readonly
   gmail_user_id: me
   calendar_id: primary
   sheets:
     spreadsheet_id: "1_126A0A6-yX6n5sQYmsH_Jbk900yzjDaUy4jyX_aWT0"
     contacts_range: Contacts!A:Z
     deals_range: Deals!A:Z
+  drive:
+    enabled: true
+    folder_ids: []
+    query: ""
+    include_mime_types:
+      - application/vnd.google-apps.document
+      - text/plain
+      - text/markdown
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    page_size: 100
+  keep:
+    enabled: false
+    page_size: 50
+    include_trashed: false
+  tasks:
+    enabled: true
+    tasklist_filter: []
+    default_tasklist: My Tasks
+    page_size: 100
 
 runtime:
   state_dir: state
@@ -23,3 +47,14 @@ runtime:
   max_messages: 250
   extraction_mode: hybrid_llm_validated
   source_owner: Dan
+
+write_guards:
+  enable_writes: false
+  gmail_draft_enabled: false
+  calendar_write_enabled: false
+  calendar_delete_enabled: false
+  sheets_write_enabled: false
+  tasks_write_enabled: false
+  writable_tasklists: []
+  writable_calendars: []
+  writable_spreadsheets: []
