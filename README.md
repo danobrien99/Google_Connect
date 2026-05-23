@@ -53,15 +53,20 @@ print("Scopes:", cfg.google.scopes)
 PY
 ```
 
+To force a fresh browser grant without reusing the cached token, set `GOOGLE_CONNECT_FORCE_FRESH_OAUTH=true` before starting the MCP server, or run:
+
+```bash
+python -m google_connect.product.bootstrap_auth --config config/google_connect.yaml --fresh
+```
+
 Notes:
 
 - Make sure the configured scopes match what you want before running the flow.
 - For Gmail draft support, include `https://www.googleapis.com/auth/gmail.compose`.
 - Do not include `https://www.googleapis.com/auth/gmail.send` or `https://mail.google.com/`; those are rejected by policy.
-- If the browser flow falls back to manual copy/paste, Google will redirect the browser to a URL starting with `http://localhost/?state=...&code=...` after approval.
-- There is usually no local web server listening on `localhost`, so the page may fail to load. That is expected.
-- Copy the full `http://localhost/...` URL from the browser address bar and paste that entire URL back into the terminal when prompted.
-- Do not paste the original Google authorization URL; paste the final localhost redirect URL after approval.
+- The auth helper opens your browser, waits for the local OAuth redirect, and completes the token exchange without requiring copy/paste.
+- If the browser callback fails, check that your Google OAuth client is configured for a loopback redirect URI compatible with installed-app flows.
+- A fresh grant requests consent again and uses the current config scopes instead of reusing an older cached token.
 - Restart the MCP servers after re-auth so they pick up the refreshed token.
 
 ## Runners
@@ -128,5 +133,7 @@ Both servers use the same Google OAuth token/config as the rest of the package. 
 
 The write server does not expose Gmail send or compose tools, and config loading rejects Gmail send/compose scopes entirely.
 The write server exposes Gmail draft creation only. Gmail send is not implemented, and config loading still rejects `gmail.send` and full-mail scopes.
+Both MCP servers eagerly load Google credentials on startup so the browser auth flow runs before tool serving begins.
+`tasks_list_tasks` defaults to active tasks only so completed tasks do not slow down the list path.
 
 See `docs/OPERATIONS.md` for cron and wrapper examples.

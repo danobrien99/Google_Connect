@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import os
 
 from mcp.server.fastmcp import FastMCP
 
@@ -63,9 +64,9 @@ def tasks_list_tasklists(max_results: int = 20) -> list[dict]:
 
 
 @mcp.tool()
-def tasks_list_tasks(tasklist: str, max_results: int = 50, show_completed: bool = True) -> list[dict]:
-    """List tasks in a named tasklist or tasklist ID."""
-    return backend.tasks_list_tasks(tasklist_ref=tasklist, max_results=max_results, show_completed=show_completed)
+def tasks_list_tasks(tasklist: str, max_results: int = 50) -> list[dict]:
+    """List active tasks in a named tasklist or tasklist ID."""
+    return backend.tasks_list_tasks(tasklist_ref=tasklist, max_results=max_results)
 
 
 @mcp.tool()
@@ -74,5 +75,24 @@ def keep_list_notes(page_size: int = 20) -> list[dict]:
     return backend.keep_list_notes(page_size=page_size)
 
 
+@mcp.tool()
+def runtime_status() -> dict:
+    """Return connector/runtime readiness for product onboarding and health checks."""
+    return backend.runtime_status()
+
+
+def main() -> None:
+    if host := os.environ.get("GOOGLE_CONNECT_MCP_HOST"):
+        mcp.settings.host = host
+    if port := os.environ.get("GOOGLE_CONNECT_MCP_PORT"):
+        mcp.settings.port = int(port)
+    force_fresh = os.environ.get("GOOGLE_CONNECT_FORCE_FRESH_OAUTH", "").strip().lower() in {"1", "true", "yes", "on"}
+    backend.credentials(force_fresh=force_fresh)
+    mcp.run(
+        transport=os.environ.get("GOOGLE_CONNECT_MCP_TRANSPORT", "stdio"),
+        mount_path=os.environ.get("GOOGLE_CONNECT_MCP_MOUNT_PATH"),
+    )
+
+
 if __name__ == "__main__":
-    mcp.run()
+    main()

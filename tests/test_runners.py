@@ -6,6 +6,7 @@ from google_connect.runners.calendar_reader import list_events
 from google_connect.runners.drive_reader import extract_file_text
 from google_connect.runners.gmail_incremental import list_message_details
 from google_connect.runners.tasks_reader import filter_tasklists
+from google_connect.runners.tasks_reader import list_tasks
 from google_connect.runners.tasks_writer import resolve_tasklist
 
 
@@ -97,7 +98,14 @@ class TasksServiceStub:
     def tasklists(self):
         return self
 
+    def tasks(self):
+        return self
+
     def list(self, **kwargs):
+        if "tasklist" in kwargs:
+            active_only = [task for task in self._tasklists if task.get("status") != "completed"]
+            if kwargs.get("showCompleted") is False and kwargs.get("showHidden") is False:
+                return _ExecuteOnce({"items": active_only})
         return _ExecuteOnce({"items": self._tasklists})
 
 
@@ -136,3 +144,13 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(filter_tasklists(tasklists, ["Two"]), [{"id": "2", "title": "Two"}])
         resolved = resolve_tasklist(TasksServiceStub(tasklists), "Two", 100)
         self.assertEqual(resolved["id"], "2")
+
+    def test_tasks_list_only_requests_active_items(self) -> None:
+        service = TasksServiceStub(
+            [
+                {"id": "1", "status": "needsAction"},
+                {"id": "2", "status": "completed"},
+            ]
+        )
+        tasks = list_tasks(service, "tasklist-1", 25)
+        self.assertEqual([task["id"] for task in tasks], ["1"])

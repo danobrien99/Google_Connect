@@ -42,10 +42,15 @@ class WorkspaceBackend:
             self._logger = setup_logging(self.config().runtime.log_dir, "google_workspace_mcp")
         return self._logger
 
-    def credentials(self):
+    def credentials(self, force_fresh: bool = False):
         if self._credentials is None:
             cfg = self.config()
-            self._credentials = load_credentials(cfg.google.credentials_path, cfg.google.token_path, cfg.google.scopes)
+            self._credentials = load_credentials(
+                cfg.google.credentials_path,
+                cfg.google.token_path,
+                cfg.google.scopes,
+                force_fresh=force_fresh,
+            )
         return self._credentials
 
     def service(self, api_name: str, version: str):
@@ -77,6 +82,47 @@ class WorkspaceBackend:
     def gmail_profile(self) -> dict[str, Any]:
         cfg = self.config()
         return self.service("gmail", "v1").users().getProfile(userId=cfg.google.gmail_user_id).execute()
+
+    def runtime_status(self) -> dict[str, Any]:
+        cfg = self.config()
+        credentials_error: str | None = None
+        token_exists = cfg.google.token_path.exists()
+        credentials_exists = cfg.google.credentials_path.exists()
+        gmail_ok = False
+        calendar_ok = False
+        drive_ok = False
+        tasks_ok = False
+        if credentials_exists:
+            try:
+                self.credentials()
+                gmail_ok = bool(self.gmail_profile().get("emailAddress"))
+                calendar_ok = isinstance(
+                    self.calendar_list_events(
+                        datetime.utcnow().isoformat() + "Z",
+                        (datetime.utcnow() + timedelta(days=1)).isoformat() + "Z",
+                        max_results=1,
+                    ),
+                    list,
+                )
+                drive_ok = isinstance(self.drive_list_files(query="", page_size=1), list)
+                tasks_ok = isinstance(self.tasks_list_tasklists(max_results=1), list)
+            except Exception as exc:  # noqa: BLE001
+                credentials_error = str(exc)
+        return {
+            "config_path": os.environ.get("GOOGLE_CONNECT_CONFIG_PATH", self.config_path),
+            "runtime_root": os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT"),
+            "credentials_path": str(cfg.google.credentials_path),
+            "token_path": str(cfg.google.token_path),
+            "credentials_exists": credentials_exists,
+            "token_exists": token_exists,
+            "credentials_error": credentials_error,
+            "surfaces": {
+                "gmail": {"ok": gmail_ok},
+                "calendar": {"ok": calendar_ok},
+                "drive": {"ok": drive_ok},
+                "tasks": {"ok": tasks_ok},
+            },
+        }
 
     def gmail_list_threads(self, query: str, max_results: int) -> list[dict[str, Any]]:
         cfg = self.config()
@@ -276,12 +322,9 @@ class WorkspaceBackend:
     def tasks_list_tasklists(self, max_results: int) -> list[dict[str, Any]]:
         return list_tasklists(self.service("tasks", "v1"), max_results)
 
-    def tasks_list_tasks(self, tasklist_ref: str, max_results: int, show_completed: bool = True) -> list[dict[str, Any]]:
+    def tasks_list_tasks(self, tasklist_ref: str, max_results: int) -> list[dict[str, Any]]:
         tasklist = resolve_tasklist(self.service("tasks", "v1"), tasklist_ref, self.config().google.tasks.page_size)
-        tasks = list_tasks(self.service("tasks", "v1"), tasklist["id"], max_results)
-        if show_completed:
-            return tasks
-        return [task for task in tasks if task.get("status") != "completed"]
+        return list_tasks(self.service("tasks", "v1"), tasklist["id"], max_results)
 
     def tasks_create_task(
         self, tasklist_ref: str, title: str, notes: str | None, due: str | None, parent: str | None, confirmed: bool

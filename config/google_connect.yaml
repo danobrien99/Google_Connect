@@ -7,8 +7,7 @@ google:
   token_path: state/google-token.json
   scopes:
     - https://www.googleapis.com/auth/gmail.readonly
-    - https://www.googleapis.com/auth/gmail.compose
-    - https://www.googleapis.com/auth/calendar.readonly
+    - https://www.googleapis.com/auth/calendar
     - https://www.googleapis.com/auth/spreadsheets.readonly
     - https://www.googleapis.com/auth/drive.readonly
     - https://www.googleapis.com/auth/tasks
@@ -49,12 +48,13 @@ runtime:
   source_owner: Dan
 
 write_guards:
-  enable_writes: false
-  gmail_draft_enabled: false
-  calendar_write_enabled: false
+  enable_writes: true
+  gmail_draft_enabled: true
+  calendar_write_enabled: true
   calendar_delete_enabled: false
-  sheets_write_enabled: false
-  tasks_write_enabled: false
+  sheets_write_enabled: true
+  tasks_write_enabled: true
   writable_tasklists: []
-  writable_calendars: []
+  writable_calendars:
+    - primary
   writable_spreadsheets: []

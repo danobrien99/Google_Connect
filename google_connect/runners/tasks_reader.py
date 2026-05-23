@@ -32,7 +32,7 @@ def list_tasks(service: Any, tasklist_id: str, page_size: int) -> list[dict[str,
     while True:
         response = (
             service.tasks()
-            .list(tasklist=tasklist_id, maxResults=page_size, pageToken=page_token, showCompleted=True, showHidden=True)
+            .list(tasklist=tasklist_id, maxResults=page_size, pageToken=page_token, showCompleted=False, showHidden=False)
             .execute()
         )
         tasks.extend(response.get("items", []))

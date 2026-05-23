@@ -89,6 +89,7 @@ class AppConfig:
 
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
+GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
 FORBIDDEN_GMAIL_SCOPES = {
     "https://www.googleapis.com/auth/gmail.send",
     "https://mail.google.com/",
@@ -107,11 +108,9 @@ def _load_dotenv(path: Path) -> None:
 
 
 def _merge_env_file_candidates(config_path: Path) -> None:
-    candidates = [
-        Path.cwd() / ".env",
-        config_path.parent / ".env",
-        config_path.parent.parent / ".env",
-    ]
+    candidates = [config_path.parent / ".env"]
+    if not os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT"):
+        candidates.append(config_path.parent.parent / ".env")
     seen: set[Path] = set()
     for candidate in candidates:
         resolved = candidate.resolve()
@@ -153,8 +152,32 @@ def _env_list(data: dict, env_key: str, *path: str, default: list[str] | None = 
 def _validate_google_scopes(scopes: list[str]) -> list[str]:
     forbidden = sorted(scope for scope in scopes if scope in FORBIDDEN_GMAIL_SCOPES)
     if forbidden:
-        raise ValueError(f"Gmail send/compose scopes are forbidden by policy: {', '.join(forbidden)}")
+        raise ValueError(f"Gmail send/full-mail scopes are forbidden by policy: {', '.join(forbidden)}")
     return scopes
+
+
+def _resolved_google_scopes(data: dict) -> list[str]:
+    scopes = _env_list(data, "GOOGLE_CONNECT_GOOGLE_SCOPES", "google", "scopes")
+    include_gmail_compose = _env_bool(
+        data,
+        "GOOGLE_CONNECT_INCLUDE_GMAIL_COMPOSE_SCOPE",
+        default=GMAIL_COMPOSE_SCOPE in scopes,
+    )
+    normalized = [scope for scope in scopes if scope != GMAIL_COMPOSE_SCOPE]
+    if include_gmail_compose:
+        normalized.append(GMAIL_COMPOSE_SCOPE)
+    return _validate_google_scopes(normalized)
+
+
+def _resolve_runtime_path(value: str | Path, *, config_path: Path) -> Path:
+    raw = Path(value)
+    if raw.is_absolute():
+        return raw
+
+    runtime_root = os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT")
+    if runtime_root:
+        return Path(runtime_root).expanduser().resolve() / raw
+    return (config_path.parent / raw).resolve()
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -163,7 +186,7 @@ def load_config(path: str | Path) -> AppConfig:
     data = yaml.safe_load(config_path.read_text()) or {}
     google_data = data.get("google", {})
 
-    scopes = _validate_google_scopes(_env_list(data, "GOOGLE_CONNECT_GOOGLE_SCOPES", "google", "scopes"))
+    scopes = _resolved_google_scopes(data)
 
     return AppConfig(
         ekg=EkgConfig(
@@ -171,8 +194,14 @@ def load_config(path: str | Path) -> AppConfig:
             webhook_secret=_env_or(data, "GOOGLE_CONNECT_EKG_WEBHOOK_SECRET", "ekg", "webhook_secret"),
         ),
         google=GoogleConfig(
-            credentials_path=Path(_env_or(data, "GOOGLE_CONNECT_GOOGLE_CREDENTIALS_PATH", "google", "credentials_path")),
-            token_path=Path(_env_or(data, "GOOGLE_CONNECT_GOOGLE_TOKEN_PATH", "google", "token_path")),
+            credentials_path=_resolve_runtime_path(
+                _env_or(data, "GOOGLE_CONNECT_GOOGLE_CREDENTIALS_PATH", "google", "credentials_path"),
+                config_path=config_path,
+            ),
+            token_path=_resolve_runtime_path(
+                _env_or(data, "GOOGLE_CONNECT_GOOGLE_TOKEN_PATH", "google", "token_path"),
+                config_path=config_path,
+            ),
             scopes=scopes,
             gmail_user_id=_env_or(data, "GOOGLE_CONNECT_GMAIL_USER_ID", "google", "gmail_user_id", default="me"),
             calendar_id=_env_or(data, "GOOGLE_CONNECT_CALENDAR_ID", "google", "calendar_id", default="primary"),
@@ -226,8 +255,14 @@ def load_config(path: str | Path) -> AppConfig:
             ),
         ),
         runtime=RuntimeConfig(
-            state_dir=Path(_env_or(data, "GOOGLE_CONNECT_STATE_DIR", "runtime", "state_dir", default="state")),
-            log_dir=Path(_env_or(data, "GOOGLE_CONNECT_LOG_DIR", "runtime", "log_dir", default="logs")),
+            state_dir=_resolve_runtime_path(
+                _env_or(data, "GOOGLE_CONNECT_STATE_DIR", "runtime", "state_dir", default="state"),
+                config_path=config_path,
+            ),
+            log_dir=_resolve_runtime_path(
+                _env_or(data, "GOOGLE_CONNECT_LOG_DIR", "runtime", "log_dir", default="logs"),
+                config_path=config_path,
+            ),
             lookback_days=_env_int(data, "GOOGLE_CONNECT_LOOKBACK_DAYS", "runtime", "lookback_days", default=30),
             max_messages=_env_int(data, "GOOGLE_CONNECT_MAX_MESSAGES", "runtime", "max_messages", default=250),
             extraction_mode=_env_or(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from google_connect.mcp.backend import WorkspaceBackend
@@ -131,5 +133,18 @@ def tasks_complete_task(tasklist: str, task_id: str, confirmed: bool = False) ->
     return backend.tasks_complete_task(tasklist_ref=tasklist, task_id=task_id, confirmed=confirmed)
 
 
+def main() -> None:
+    if host := os.environ.get("GOOGLE_CONNECT_MCP_HOST"):
+        mcp.settings.host = host
+    if port := os.environ.get("GOOGLE_CONNECT_MCP_PORT"):
+        mcp.settings.port = int(port)
+    force_fresh = os.environ.get("GOOGLE_CONNECT_FORCE_FRESH_OAUTH", "").strip().lower() in {"1", "true", "yes", "on"}
+    backend.credentials(force_fresh=force_fresh)
+    mcp.run(
+        transport=os.environ.get("GOOGLE_CONNECT_MCP_TRANSPORT", "stdio"),
+        mount_path=os.environ.get("GOOGLE_CONNECT_MCP_MOUNT_PATH"),
+    )
+
+
 if __name__ == "__main__":
-    mcp.run()
+    main()
