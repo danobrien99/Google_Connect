@@ -33,7 +33,7 @@ Fill in `.env` or `config/google_connect.yaml` with:
 
 ## OAuth setup and re-auth
 
-There is no separate auth CLI. The OAuth flow is triggered automatically the first time the package calls `load_credentials()`.
+The OAuth flow is triggered automatically the first time the package calls `load_credentials()`.
 
 To force a fresh auth flow and regenerate the token:
 
@@ -59,14 +59,27 @@ To force a fresh browser grant without reusing the cached token, set `GOOGLE_CON
 python -m google_connect.product.bootstrap_auth --config config/google_connect.yaml --fresh
 ```
 
+For WSL/OpenClaw on Windows, use the dedicated WSL auth path:
+
+```bash
+python -m google_connect.product.bootstrap_auth_wsl --config config/google_connect.yaml --fresh
+```
+
+Or select the same flow from the shared bootstrap command:
+
+```bash
+python -m google_connect.product.bootstrap_auth --config config/google_connect.yaml --auth-mode wsl --fresh
+```
+
 Notes:
 
 - Make sure the configured scopes match what you want before running the flow.
 - For Gmail draft support, include `https://www.googleapis.com/auth/gmail.compose`.
 - Do not include `https://www.googleapis.com/auth/gmail.send` or `https://mail.google.com/`; those are rejected by policy.
-- The auth helper opens your browser, waits for the local OAuth redirect, and completes the token exchange without requiring copy/paste.
+- Desktop auth opens your local browser, waits for the local OAuth redirect, and completes the token exchange without requiring copy/paste.
 - If the browser callback fails, check that your Google OAuth client is configured for a loopback redirect URI compatible with installed-app flows.
 - A fresh grant requests consent again and uses the current config scopes instead of reusing an older cached token.
+- WSL/OpenClaw auth prints a URL for the Windows browser, listens for the callback inside WSL, and falls back to a one-time pasted URL or code if the callback never reaches WSL.
 - Restart the MCP servers after re-auth so they pick up the refreshed token.
 
 ## Runners
@@ -111,6 +124,7 @@ This connector remains document-first. It does not write ontology assertions dir
 ## Operational notes
 
 - `.env` values override YAML config.
+- Set `GOOGLE_CONNECT_AUTH_MODE=wsl` in OpenClaw/WSL if browser auth should avoid Linux browser automation.
 - Google Keep support is user-OAuth first, but Workspace admin approval may still be required for Keep scopes.
 - Drive ingestion is docs-focused in v1: native Google Docs plus supported plain text, PDF, and DOCX files.
 - Tasks v1 supports create, update, and complete. Delete is intentionally excluded.
@@ -135,5 +149,12 @@ The write server does not expose Gmail send or compose tools, and config loading
 The write server exposes Gmail draft creation only. Gmail send is not implemented, and config loading still rejects `gmail.send` and full-mail scopes.
 Both MCP servers eagerly load Google credentials on startup so the browser auth flow runs before tool serving begins.
 `tasks_list_tasks` defaults to active tasks only so completed tasks do not slow down the list path.
+
+### WSL/OpenClaw runtime
+
+- Set `GOOGLE_CONNECT_AUTH_MODE=wsl` for read/write MCP servers and shell wrappers running inside WSL/OpenClaw.
+- The WSL flow prints a Google auth URL instead of trying to launch a Linux browser.
+- It listens on a WSL callback port using the existing installed-app `http://localhost` redirect model.
+- If Windows-to-WSL localhost callback forwarding fails, paste the returned `http://localhost...` URL or the `code` value once to finish the grant.
 
 See `docs/OPERATIONS.md` for cron and wrapper examples.

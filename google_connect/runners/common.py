@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import os
 
 from google_connect.config import AppConfig, load_config
 from google_connect.ekg_client import EkgClient
@@ -19,7 +20,12 @@ def bootstrap(config_path: str | Path, runner_name: str) -> tuple[AppConfig, Ekg
 
 
 def google_service(config: AppConfig, api_name: str, version: str):
-    creds = load_credentials(config.google.credentials_path, config.google.token_path, config.google.scopes)
+    creds = load_credentials(
+        config.google.credentials_path,
+        config.google.token_path,
+        config.google.scopes,
+        auth_mode=os.environ.get("GOOGLE_CONNECT_AUTH_MODE", "desktop"),
+    )
     return build_service(api_name, version, creds)
 
 

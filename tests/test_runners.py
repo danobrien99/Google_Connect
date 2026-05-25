@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from google_connect.runners.calendar_reader import list_events
 from google_connect.runners.drive_reader import extract_file_text
 from google_connect.runners.gmail_incremental import list_message_details
+from google_connect.runners.common import google_service
 from google_connect.runners.tasks_reader import filter_tasklists
 from google_connect.runners.tasks_reader import list_tasks
 from google_connect.runners.tasks_writer import resolve_tasklist
@@ -154,3 +157,36 @@ class RunnerTests(unittest.TestCase):
         )
         tasks = list_tasks(service, "tasklist-1", 25)
         self.assertEqual([task["id"] for task in tasks], ["1"])
+
+    def test_google_service_uses_env_auth_mode(self) -> None:
+        config = type(
+            "Config",
+            (),
+            {
+                "google": type(
+                    "Google",
+                    (),
+                    {
+                        "credentials_path": "creds.json",
+                        "token_path": "token.json",
+                        "scopes": ["scope-a"],
+                    },
+                )(),
+            },
+        )()
+        original = os.environ.get("GOOGLE_CONNECT_AUTH_MODE")
+        try:
+            os.environ["GOOGLE_CONNECT_AUTH_MODE"] = "wsl"
+            with patch("google_connect.runners.common.load_credentials", return_value="creds") as mock_load, patch(
+                "google_connect.runners.common.build_service", return_value="service"
+            ) as mock_build:
+                service = google_service(config, "gmail", "v1")
+        finally:
+            if original is None:
+                os.environ.pop("GOOGLE_CONNECT_AUTH_MODE", None)
+            else:
+                os.environ["GOOGLE_CONNECT_AUTH_MODE"] = original
+
+        mock_load.assert_called_once_with("creds.json", "token.json", ["scope-a"], auth_mode="wsl")
+        mock_build.assert_called_once_with("gmail", "v1", "creds")
+        self.assertEqual(service, "service")

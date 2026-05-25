@@ -24,8 +24,30 @@
 - Calendar writes support create, update, and delete.
 - Sheets writes support range update and row append.
 - Tasks writes are limited to create, update, and complete.
+- Tasks reads only request active tasks by default.
 - Gmail send/compose is blocked by policy and cannot be enabled through scopes.
 - All write runners require explicit config enablement plus confirmation flags.
+
+## WSL and OpenClaw auth
+
+Use the WSL/OpenClaw auth mode when the repo is running inside WSL and the operator will complete consent in a Windows browser.
+
+```bash
+export GOOGLE_CONNECT_AUTH_MODE=wsl
+python -m google_connect.product.bootstrap_auth_wsl --config config/google_connect.yaml --fresh
+```
+
+Equivalent shared bootstrap command:
+
+```bash
+python -m google_connect.product.bootstrap_auth --config config/google_connect.yaml --auth-mode wsl --fresh
+```
+
+Behavior:
+
+- The auth helper prints a Google auth URL and does not attempt to open a Linux browser.
+- It listens for the callback inside WSL using the installed-app localhost redirect.
+- If the callback never reaches WSL, paste the final `http://localhost...` URL or just the `code` value once to finish the token exchange.
 
 ## MCP stdio entrypoints
 
@@ -40,6 +62,7 @@ Recommended deployment pattern:
 
 - Always run the read server
 - Only expose the write server to trusted agents
+- Set `GOOGLE_CONNECT_AUTH_MODE=wsl` before starting MCP in WSL/OpenClaw if you want startup auth to use the Windows-browser-compatible flow
 - Keep `GOOGLE_CONNECT_ENABLE_WRITES=false` unless mutations are intentionally required
 - Use allowlists for calendars, spreadsheets, and tasklists before enabling write tools
 - State files live under `state/`.

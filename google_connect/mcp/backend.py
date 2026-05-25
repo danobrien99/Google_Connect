@@ -50,6 +50,7 @@ class WorkspaceBackend:
                 cfg.google.token_path,
                 cfg.google.scopes,
                 force_fresh=force_fresh,
+                auth_mode=os.environ.get("GOOGLE_CONNECT_AUTH_MODE", "desktop"),
             )
         return self._credentials
 

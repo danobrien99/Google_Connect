@@ -188,3 +188,34 @@ class WorkspaceBackendGmailTests(unittest.TestCase):
         status = self.backend.runtime_status()
         self.assertFalse(status["credentials_exists"])
         self.assertFalse(status["surfaces"]["gmail"]["ok"])
+
+    def test_backend_credentials_uses_env_auth_mode(self) -> None:
+        self.backend._config = type(
+            "Config",
+            (),
+            {
+                "google": type(
+                    "Google",
+                    (),
+                    {
+                        "gmail_user_id": "me",
+                        "credentials_path": "creds.json",
+                        "token_path": "token.json",
+                        "scopes": ["scope-a"],
+                    },
+                )(),
+            },
+        )()
+        with patch("google_connect.mcp.backend.load_credentials", return_value=object()) as mock_load, patch.dict(
+            "os.environ",
+            {"GOOGLE_CONNECT_AUTH_MODE": "wsl"},
+            clear=False,
+        ):
+            self.backend.credentials(force_fresh=True)
+        mock_load.assert_called_once_with(
+            "creds.json",
+            "token.json",
+            ["scope-a"],
+            force_fresh=True,
+            auth_mode="wsl",
+        )
