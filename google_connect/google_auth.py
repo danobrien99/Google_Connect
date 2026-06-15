@@ -6,6 +6,7 @@ import socket
 import wsgiref.simple_server
 
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -151,7 +152,10 @@ def load_credentials(
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except RefreshError:
+                creds = _run_installed_flow(credentials_path, scopes, auth_mode)
         else:
             creds = _run_installed_flow(credentials_path, scopes, auth_mode)
         token_path.parent.mkdir(parents=True, exist_ok=True)

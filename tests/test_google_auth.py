@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from google.auth.exceptions import RefreshError
 from google_connect.google_auth import AUTH_MODE_DESKTOP
 from google_connect.google_auth import _run_installed_flow
 from google_connect.google_auth import _run_wsl_installed_flow
@@ -154,3 +155,33 @@ class GoogleAuthTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 load_credentials(credentials_path, token_path, ["scope-a"], auth_mode="bogus")
+
+    def test_load_credentials_falls_back_to_installed_flow_when_refresh_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            credentials_path = tmp_path / "client.json"
+            token_path = tmp_path / "token.json"
+            credentials_path.write_text(json.dumps({"installed": {"redirect_uris": ["http://localhost"]}}))
+            token_path.write_text("{}")
+
+            cached = MagicMock()
+            cached.valid = False
+            cached.expired = True
+            cached.refresh_token = "refresh-token"
+            cached.refresh.side_effect = RefreshError("invalid_scope")
+
+            fresh = MagicMock()
+            fresh.valid = True
+            fresh.to_json.return_value = "{\"token\": \"fresh\"}"
+
+            with (
+                patch("google_connect.google_auth.Credentials.from_authorized_user_file", return_value=cached),
+                patch("google_connect.google_auth._run_installed_flow", return_value=fresh) as mock_run_flow,
+            ):
+                result = load_credentials(credentials_path, token_path, ["scope-a"], auth_mode=AUTH_MODE_DESKTOP)
+                written_token = token_path.read_text()
+
+        cached.refresh.assert_called_once()
+        mock_run_flow.assert_called_once_with(credentials_path, ["scope-a"], AUTH_MODE_DESKTOP)
+        self.assertEqual(written_token, "{\"token\": \"fresh\"}")
+        self.assertIs(result, fresh)
