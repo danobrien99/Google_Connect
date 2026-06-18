@@ -65,7 +65,7 @@ Recommended deployment pattern:
 - Set `GOOGLE_CONNECT_AUTH_MODE=wsl` before starting MCP in WSL/OpenClaw if you want startup auth to use the Windows-browser-compatible flow
 - Keep `GOOGLE_CONNECT_ENABLE_WRITES=false` unless mutations are intentionally required
 - Use allowlists for calendars, spreadsheets, and tasklists before enabling write tools
-- State files live under `state/`.
+- State files live under the project-root `state/` directory.
 - Logs live under `logs/`.
 - EKG must be reachable at the configured base URL.
 - Keep may require Workspace admin approval for the requested scopes.

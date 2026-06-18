@@ -38,7 +38,7 @@ The OAuth flow is triggered automatically the first time the package calls `load
 To force a fresh auth flow and regenerate the token:
 
 ```bash
-cd /Users/dobrien/code/Google_Connect
+cd /path/to/Google_Connect
 source .venv/bin/activate
 rm -f state/google-token.json
 python - <<'PY'
@@ -81,6 +81,7 @@ Notes:
 - A fresh grant requests consent again and uses the current config scopes instead of reusing an older cached token.
 - WSL/OpenClaw auth prints a URL for the Windows browser, listens for the callback inside WSL, and falls back to a one-time pasted URL or code if the callback never reaches WSL.
 - Restart the MCP servers after re-auth so they pick up the refreshed token.
+- The canonical local secret/runtime location is the project-root `state/` directory; `config/state` remains as a compatibility symlink.
 
 ## Runners
 

@@ -169,6 +169,12 @@ def _resolved_google_scopes(data: dict) -> list[str]:
     return _validate_google_scopes(normalized)
 
 
+def _default_runtime_root(config_path: Path) -> Path:
+    if config_path.parent.name == "config" and config_path.parent.parent != config_path.parent:
+        return config_path.parent.parent
+    return config_path.parent
+
+
 def _resolve_runtime_path(value: str | Path, *, config_path: Path) -> Path:
     raw = Path(value)
     if raw.is_absolute():
@@ -177,7 +183,7 @@ def _resolve_runtime_path(value: str | Path, *, config_path: Path) -> Path:
     runtime_root = os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT")
     if runtime_root:
         return Path(runtime_root).expanduser().resolve() / raw
-    return (config_path.parent / raw).resolve()
+    return (_default_runtime_root(config_path) / raw).resolve()
 
 
 def load_config(path: str | Path) -> AppConfig:

@@ -185,6 +185,52 @@ class LoadConfigTests(unittest.TestCase):
             else:
                 os.environ["GOOGLE_CONNECT_INCLUDE_GMAIL_COMPOSE_SCOPE"] = original_include
 
+    def test_relative_paths_default_to_repo_root_for_config_dir_layout(self) -> None:
+        original_scopes = os.environ.get("GOOGLE_CONNECT_GOOGLE_SCOPES")
+        original_runtime_root = os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT")
+        try:
+            os.environ.pop("GOOGLE_CONNECT_GOOGLE_SCOPES", None)
+            os.environ.pop("GOOGLE_CONNECT_RUNTIME_ROOT", None)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                config_dir = root / "config"
+                config_dir.mkdir()
+                config_path = config_dir / "google_connect.yaml"
+                config_path.write_text(
+                    textwrap.dedent(
+                        """
+                        ekg:
+                          base_url: http://yaml.local
+                        google:
+                          credentials_path: state/google-oauth-client.json
+                          token_path: state/google-token.json
+                          scopes:
+                            - https://www.googleapis.com/auth/gmail.readonly
+                          sheets:
+                            spreadsheet_id: sheet
+                            contacts_range: Contacts!A:Z
+                            deals_range: Deals!A:Z
+                        runtime:
+                          state_dir: state
+                          log_dir: logs
+                        """
+                    ).strip()
+                )
+                config = load_config(config_path)
+                self.assertEqual(config.google.credentials_path, (root / "state/google-oauth-client.json").resolve())
+                self.assertEqual(config.google.token_path, (root / "state/google-token.json").resolve())
+                self.assertEqual(config.runtime.state_dir, (root / "state").resolve())
+                self.assertEqual(config.runtime.log_dir, (root / "logs").resolve())
+        finally:
+            if original_scopes is None:
+                os.environ.pop("GOOGLE_CONNECT_GOOGLE_SCOPES", None)
+            else:
+                os.environ["GOOGLE_CONNECT_GOOGLE_SCOPES"] = original_scopes
+            if original_runtime_root is None:
+                os.environ.pop("GOOGLE_CONNECT_RUNTIME_ROOT", None)
+            else:
+                os.environ["GOOGLE_CONNECT_RUNTIME_ROOT"] = original_runtime_root
+
     def test_runtime_root_resolves_relative_paths(self) -> None:
         original_runtime_root = os.environ.get("GOOGLE_CONNECT_RUNTIME_ROOT")
         original_scopes = os.environ.get("GOOGLE_CONNECT_GOOGLE_SCOPES")
