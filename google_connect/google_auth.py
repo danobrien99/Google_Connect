@@ -176,7 +176,7 @@ def _run_wsl_installed_flow(
 
     with _SingleRequestCallbackServer(("0.0.0.0", 0), wsgiref.simple_server.WSGIRequestHandler) as flow_server:
         flow_server.set_app(_app)
-        flow.timeout = timeout_seconds
+        flow_server.timeout = timeout_seconds
         flow.redirect_uri = f"http://localhost:{flow_server.server_port}"
         auth_url, _state = flow.authorization_url(
             access_type="offline",
@@ -184,7 +184,7 @@ def _run_wsl_installed_flow(
             include_granted_scopes="true",
         )
         print("Open this URL in your Windows browser to authorize Google_Connect:")
-        print(auth_url)
+        print(auth_url, flush=True)
         print(
             f"Waiting up to {timeout_seconds} seconds for Google to redirect back to "
             f"http://localhost:{flow_server.server_port} ..."

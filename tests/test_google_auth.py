@@ -209,6 +209,35 @@ class GoogleAuthTests(unittest.TestCase):
         flow.fetch_token.assert_called_once_with(authorization_response="http://localhost:8765?code=raw-code-123")
         self.assertIs(result, credentials)
 
+    def test_run_wsl_flow_sets_server_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            credentials_path = Path(tmpdir) / "client.json"
+            credentials_path.write_text(json.dumps({"installed": {"redirect_uris": ["http://localhost"]}}))
+
+            flow = MagicMock()
+            credentials = MagicMock()
+            flow.credentials = credentials
+            flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth", "state-1")
+            _FakeCallbackServer.response_to_set = None
+            seen_server = {}
+
+            class _TimeoutAwareServer(_FakeCallbackServer):
+                def __init__(self, address, handler_cls):
+                    super().__init__(address, handler_cls)
+                    seen_server["instance"] = self
+
+            with (
+                patch("google_connect.google_auth.InstalledAppFlow.from_client_secrets_file", return_value=flow),
+                patch("google_connect.google_auth._SingleRequestCallbackServer", _TimeoutAwareServer),
+                patch("builtins.input", return_value="raw-code-123"),
+            ):
+                result = _run_wsl_installed_flow(credentials_path, ["scope-a"], timeout_seconds=42)
+
+        self.assertIn("instance", seen_server)
+        self.assertEqual(seen_server["instance"].timeout, 42)
+        self.assertEqual(result, credentials)
+        self.assertEqual(flow.redirect_uri, "http://localhost:8765")
+
     def test_load_credentials_force_fresh_ignores_cached_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
